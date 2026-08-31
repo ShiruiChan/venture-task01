@@ -39,6 +39,32 @@ CORS_ORIGINS=https://dashboard.example.com
 
 (несколько доменов — через запятую; пустое значение = CORS выключен).
 
+### Vercel (через git-интеграцию)
+
+В корне лежит `vercel.json`: Vercel собирает **только фронт** и раздаёт статику,
+Python-функция не создаётся.
+
+```json
+"buildCommand": "NUXT_APP_BASE_URL=/ NITRO_PRESET=static npm --prefix frontend run generate",
+"outputDirectory": "frontend/.output/public"
+```
+
+`NITRO_PRESET=static` задан явно: иначе Nitro видит переменную `VERCEL=1`, сам переключается
+на пресет `vercel` и кладёт сборку в `.vercel/output` вместо `.output/public`.
+
+В настройках проекта Vercel нужна одна переменная — **на этапе Build**, потому что адрес API
+вшивается в статику при сборке, а не читается в браузере:
+
+| Переменная | Значение |
+|---|---|
+| `NUXT_PUBLIC_API_BASE` | `https://<адрес-бэкенда>/api` |
+
+Без неё `nuxt.config.ts` подставит `/api`, и фронт будет стучаться на сам домен Vercel — 404.
+
+**Бэкенд на Vercel не поднять.** `LASER_COUNTERS` и `RARUS_BASE_URL` — адреса локальной сети,
+из дата-центра Vercel они недоступны; плюс SQLite нужен постоянный том, а автосбор
+(`AUTOSYNC`) — живой процесс с планировщиком. Бэкенд остаётся на варианте 1 или 3.
+
 ## Вариант 3. Без Docker, на хосте
 
 ```bash
