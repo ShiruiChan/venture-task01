@@ -99,6 +99,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Посещаемость подразделений БМ", version="1.0.0", lifespan=lifespan)
+if settings.cors_origins:
+    from fastapi.middleware.cors import CORSMiddleware
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_origins),
+        allow_methods=["GET", "POST"],
+        allow_headers=["*"],
+    )
 app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
 templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
 templates.env.globals.update(
@@ -293,3 +302,15 @@ async def api_rarus_hourly(day: Optional[str] = Query(None)):
 @app.get("/api/runs")
 async def api_runs(limit: int = Query(20, le=200)):
     return db.recent_runs(limit)
+
+
+# --- собранный Nuxt ------
+# Монтируется последним, чтобы не перехватывать API и серверные страницы.
+# html=True отдаёт index.html для вложенных путей SPA.
+if settings.frontend_dist.is_dir():
+    app.mount(
+        settings.frontend_mount,
+        StaticFiles(directory=settings.frontend_dist, html=True),
+        name="frontend",
+    )
+    log.info("Фронт раздаётся из %s на %s", settings.frontend_dist, settings.frontend_mount)

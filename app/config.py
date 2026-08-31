@@ -158,6 +158,15 @@ class Settings:
     rarus: RarusConfig = field(default_factory=RarusConfig)
     laser: LaserConfig = field(default_factory=LaserConfig)
     thresholds: Thresholds = field(default_factory=Thresholds)
+    # Собранный Nuxt (`npm run generate`): если каталог есть — FastAPI раздаёт его сам.
+    frontend_dist: Path = field(
+        default_factory=lambda: Path(_env("FRONTEND_DIST", str(BASE_DIR / "frontend" / ".output" / "public")))
+    )
+    frontend_mount: str = field(default_factory=lambda: _env("FRONTEND_MOUNT", "/app"))
+    # Нужны, только если фронт живёт на отдельном домене.
+    cors_origins: tuple[str, ...] = field(
+        default_factory=lambda: tuple(x.strip() for x in _env("CORS_ORIGINS").split(",") if x.strip())
+    )
 
 
 settings = Settings()

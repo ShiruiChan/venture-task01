@@ -1,10 +1,12 @@
 .venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+.git/
 .env
 data/*.db
 data/*.db-*
-.pytest_cache/
-frontend/.output/
 frontend/node_modules/
 frontend/.nuxt/
+frontend/.output/
+report.csv

@@ -17,6 +17,8 @@ export default defineNuxtConfig({
     },
   },
   app: {
+    // Совпадает с FRONTEND_MOUNT у FastAPI; для отдельного хостинга — '/'.
+    baseURL: process.env.NUXT_APP_BASE_URL || '/app/',
     head: {
       title: 'Сравнение датчиков подсчета',
       htmlAttrs: { lang: 'ru' },

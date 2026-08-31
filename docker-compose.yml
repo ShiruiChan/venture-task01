@@ -1,0 +1,15 @@
+services:
+  attendance:
+    build: .
+    image: attendance-dashboard
+    restart: unless-stopped
+    # host-сеть нужна, чтобы контейнер видел счётчики и 1С в локальной сети.
+    # На Linux можно заменить на network_mode: host и убрать ports.
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DB_PATH: /srv/data/attendance.db
+    volumes:
+      - ./data:/srv/data
