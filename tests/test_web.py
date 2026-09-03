@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 import pytest
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 
 from app import db
@@ -32,11 +33,22 @@ def test_resolve_period_presets():
     assert resolve_period("custom", "не-дата", "тоже")[2] == "week"
 
 
-def test_dashboard_renders_divisions(client):
-    response = client.get("/?preset=week")
+def test_root_returns_service_info(client):
+    """Сервер отдельный: в корне паспорт сервиса, а не HTML-дашборд."""
+    response = client.get("/")
     assert response.status_code == 200
-    assert "Планета Электро" in response.text
-    assert "Расхождение" in response.text
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json()["service"] == "attendance-api"
+
+
+@pytest.mark.parametrize("path", ["/sources", "/division/1", "/static/app.css", "/app/"])
+def test_no_webapp_routes(client, path):
+    """Страниц и статики у сервера больше нет - этим занимается фронт."""
+    assert client.get(path).status_code == 404
+
+
+def test_cors_enabled_for_separate_frontend():
+    assert any(m.cls is CORSMiddleware for m in app.user_middleware)
 
 
 def test_api_comparison(client):
@@ -51,14 +63,29 @@ def test_api_discrepancies_sorted(client):
     assert items and items[0]["status"] == "critical"
 
 
-def test_division_page_and_health(client):
-    division_id = db.list_divisions()[0].id
-    assert client.get(f"/division/{division_id}?preset=week").status_code == 200
+def test_health(client):
     health = client.get("/health").json()
     assert health["status"] == "ok" and health["data_to"] == date.today().isoformat()
 
 
-def test_sources_page(client):
-    response = client.get("/sources")
+def test_api_meta(client):
+    meta = client.get("/api/meta").json()
+    assert meta["presets"]["week"] == "7 дней"
+    assert meta["sources"][SOURCE_RARUS] == "1С-Рарус"
+    assert meta["thresholds"]["warn_pct"] == settings.thresholds.warn_pct
+
+
+def test_api_sources_lists_links(client):
+    body = client.get("/api/sources").json()
+    assert body["links"] and body["links"][0]["external_id"] == "o"
+    assert body["divisions"][0]["name"].startswith("Планета Электро")
+
+
+def test_api_mapping_remaps_object(client):
+    division_id = db.list_divisions()[0].id
+    response = client.post(
+        "/api/mapping",
+        json={"source": SOURCE_LASER, "external_id": "o", "division_id": division_id},
+    )
     assert response.status_code == 200
-    assert "Сопоставление объектов" in response.text
+    assert response.json()["status"] == "ok"

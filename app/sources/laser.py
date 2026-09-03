@@ -1,21 +1,9 @@
 """Коннектор к счётчикам «Лазер».
 
-Боевые доступы к API на момент разработки не выданы, поэтому коннектор
-поддерживает два режима (``LASER_MODE``):
-
-``http``
-    Обращение к реальному API. Авторизация — bearer-токен, basic-аутентификация
-    либо логин по форме (``LASER_AUTH_MODE``). Разбор ответа намеренно
-    толерантен к именованию полей: поддерживаются распространённые варианты
-    (``entered``/``in``/``count``, ``date``/``day`` в ISO или в миллисекундах).
-    Если формат ответа окажется другим, правки локализованы в
-    ``_parse_daily`` и ``_parse_objects``.
-
-``fixture``
-    Демо-режим до получения доступов: данные читаются из
-    ``data/laser_fixture.json``; при отсутствии файла генерируются
-    детерминированно от значений известных подразделений, чтобы сквозной
-    сценарий (сбор → хранение → сравнение → дашборд) был проверяемым.
+Боевых доступов к API пока нет, поэтому два режима (``LASER_MODE``): ``http`` -
+реальный API, разбор терпим к именованию полей (правки - в ``_parse_daily`` и
+``_parse_objects``); ``fixture`` - демо из ``data/laser_fixture.json`` либо
+детерминированная генерация, чтобы сквозной сценарий был проверяемым.
 """
 from __future__ import annotations
 
@@ -116,8 +104,6 @@ class LaserSource:
             self._client = httpx.AsyncClient(base_url=self.config.base_url, timeout=self.config.timeout)
         return self._client
 
-    # --- интерфейс VisitorSource ----------------------------------------
-
     async def list_objects(self) -> list[SourceObject]:
         if self.is_fixture:
             return self._fixture_objects()
@@ -134,8 +120,6 @@ class LaserSource:
             {"date_from": day_from.isoformat(), "date_to": day_to.isoformat()},
         )
         return [c for c in self._parse_daily(body) if day_from <= c.day <= day_to]
-
-    # --- HTTP-режим -
 
     async def _auth_headers(self) -> dict[str, str]:
         mode = self.config.auth_mode
@@ -156,7 +140,7 @@ class LaserSource:
             data={"user": self.config.user, "password": self.config.password},
         )
         if response.status_code >= 400:
-            raise SourceError(f"Лазер: авторизация — HTTP {response.status_code}")
+            raise SourceError(f"Лазер: авторизация - HTTP {response.status_code}")
         body = response.json()
         token = body.get("access_token") or (body.get("data") or {}).get("access_token") or body.get("token")
         if not token:
@@ -173,12 +157,12 @@ class LaserSource:
                 self._token = None
                 continue
             if response.status_code >= 400:
-                raise SourceError(f"Лазер: {path} — HTTP {response.status_code}")
+                raise SourceError(f"Лазер: {path} - HTTP {response.status_code}")
             try:
                 return response.json()
             except ValueError as exc:
-                raise SourceError(f"Лазер: {path} — некорректный JSON") from exc
-        raise SourceError(f"Лазер: {path} — не удалось получить данные")
+                raise SourceError(f"Лазер: {path} - некорректный JSON") from exc
+        raise SourceError(f"Лазер: {path} - не удалось получить данные")
 
     @staticmethod
     def _rows(body: Any) -> list[dict[str, Any]]:
@@ -231,8 +215,6 @@ class LaserSource:
             )
         return counts
 
-    # --- fixture-режим ---------------------------------------------------
-
     def _fixture_body(self) -> Optional[dict[str, Any]]:
         path = self.config.fixture_path
         if not path.exists():
@@ -260,14 +242,7 @@ class LaserSource:
         return self._generate(day_from, day_to)
 
     def _generate(self, day_from: date, day_to: date) -> list[DailyCount]:
-        """Детерминированная генерация: расхождение с базой ±0..12 %.
-
-        База берётся из ``fallback_objects``: посуточные значения
-        ``raw['daily'][YYYY-MM-DD]`` либо общее ``raw['entered']`` — их
-        подставляет сборщик из уже собранных данных 1С-Рарус. Раз в две недели
-        по каждому объекту эмулируется пропуск выгрузки, чтобы был виден
-        сценарий «нет данных по источнику».
-        """
+        """Детерминированная генерация от базы 1С-Рарус из ``fallback_objects``, расхождение ±12 %."""
         counts: list[DailyCount] = []
         for obj in self.fallback_objects:
             per_day = obj.raw.get("daily") or {}

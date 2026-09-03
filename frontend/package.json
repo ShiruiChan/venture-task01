@@ -7,11 +7,15 @@
     "build": "nuxt build",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "typecheck": "nuxt typecheck"
   },
   "devDependencies": {
+    "@types/node": "^26.4.0",
     "nuxt": "^4.0.0",
+    "typescript": "^5.9.3",
     "vue": "^3.5.0",
-    "vue-router": "^4.5.0"
+    "vue-router": "^5.3.0",
+    "vue-tsc": "^3.3.11"
   }
 }

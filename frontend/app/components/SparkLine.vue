@@ -23,13 +23,13 @@ const path = computed(() => {
   const step = props.values.length > 1 ? width / (props.values.length - 1) : width / 2
 
   const coords = points.map((p) => ({
-    // точка на самом краю обрезалась бы рамкой карточки
+    // крайнюю точку иначе режет рамка карточки
     x: Math.min(Math.max(p.index * step, 5), width - 5),
-    // сглаженная кривая может выйти за края — оставляем поля сверху и снизу
+    // поля сверху и снизу под выбег сглаженной кривой
     y: height - 6 - ((p.value - min) / span) * (height - 14),
   }))
 
-  // единственные сутки в периоде кривой не показать — рисуем точку
+  // одна точка - кривой не будет, рисуем кружок
   if (coords.length === 1) return { line: '', area: '', dot: coords[0]! }
 
   const line = smoothPath(coords)

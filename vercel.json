@@ -3,5 +3,11 @@
   "framework": null,
   "installCommand": "npm --prefix frontend ci",
   "buildCommand": "NUXT_APP_BASE_URL=/ NITRO_PRESET=static npm --prefix frontend run generate",
-  "outputDirectory": "frontend/.output/public"
+  "outputDirectory": "frontend/.output/public",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "http://159.194.208.66:8000/api/:path*"
+    }
+  ]
 }

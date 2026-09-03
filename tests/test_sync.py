@@ -37,8 +37,8 @@ def test_all_counters_answered_is_ok(temp_db, monkeypatch):
 
 
 def test_one_counter_down_is_partial_not_ok(temp_db, monkeypatch):
-    result = run_laser(monkeypatch, ["guest.advrouter.asuscomm.com:8009: /id.xml — nodename nor servname"])
-    # данные за сутки собраны, но не со всех точек — прогон помечен отдельно
+    result = run_laser(monkeypatch, ["guest.advrouter.asuscomm.com:8009: /id.xml - nodename nor servname"])
+    # данные за сутки собраны, но не со всех точек - прогон помечен отдельно
     assert (result["status"], result["rows"]) == ("partial", 1)
     assert "счётчик недоступен" in result["message"]
     run = db.recent_runs(1, temp_db)[0]

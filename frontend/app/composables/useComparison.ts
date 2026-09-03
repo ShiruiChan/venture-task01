@@ -40,7 +40,7 @@ export interface DailyPoint {
   delta: number | null
 }
 
-/** Строки «подразделение × сутки» сворачиваем в суммарную дневную динамику. */
+/** Строки «подразделение × сутки» сворачиваем в дневную динамику. */
 export function dailyTotals(rows: ComparisonRow[], period: Period): DailyPoint[] {
   const buckets = new Map<string, { rarus: number | null; laser: number | null }>()
   for (let day = new Date(period.from); day <= period.to; day = addDays(day, 1)) {

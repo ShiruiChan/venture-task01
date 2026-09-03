@@ -56,7 +56,7 @@ function yAt(value: number): number {
   return pad.top + plotHeight - (value / scaleMax.value) * plotHeight
 }
 
-/** Разрывы в данных не соединяем: каждый непрерывный участок — отдельная кривая. */
+// разрывы не соединяем: каждый непрерывный участок - отдельная кривая
 function segments(key: SeriesKey): string[] {
   const paths: string[] = []
   let current: Pt[] = []
@@ -73,7 +73,7 @@ function segments(key: SeriesKey): string[] {
   return paths.filter(Boolean)
 }
 
-/** Сутки без соседей (начало периода, дыры в данных) — кривой их не показать, ставим точку. */
+// сутки без соседей кривой не показать - ставим точку
 function orphans(key: SeriesKey): Pt[] {
   return props.points
     .map((point, index) => ({ point, index }))
@@ -96,7 +96,7 @@ function labelFor(day: string): string {
   return `${`${date.getDate()}`.padStart(2, '0')}.${`${date.getMonth() + 1}`.padStart(2, '0')}`
 }
 
-/** На длинных периодах подписей на оси должно остаться не больше восьми. */
+// на оси не больше восьми подписей
 const labelStride = computed(() => Math.max(1, Math.ceil(props.points.length / 8)))
 
 const hover = ref<number | null>(null)
@@ -128,7 +128,7 @@ const tooltip = computed(() => {
 
 function toggle(key: SeriesKey) {
   const other = key === 'rarus' ? 'laser' : 'rarus'
-  // последнюю включённую серию не гасим — иначе график остаётся пустым
+  // последнюю включённую серию не гасим
   if (visible.value[key] && !visible.value[other]) return
   visible.value = { ...visible.value, [key]: !visible.value[key] }
 }

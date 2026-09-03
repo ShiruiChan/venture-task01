@@ -57,7 +57,7 @@ async def test_rarus_fetch_day_parses_series():
         counts = await source.fetch_day(date(2026, 8, 30))
     assert len(counts) == 1
     assert counts[0].entered == 412
-    # нулевой GUID заменяется названием объекта — иначе все объекты слились бы в один
+    # нулевой GUID заменяется названием объекта - иначе все объекты слились бы в один
     assert counts[0].external_id == "Планета Электро, Якутск, Бестужева-Марлинского 64-1"
     widget = next(c for c in calls if "objects-rating" in c.url.path)
     assert widget.url.params["period"] == "day"

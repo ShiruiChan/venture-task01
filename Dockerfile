@@ -1,15 +1,4 @@
-# --- 1. Сборка Nuxt в статику -------------------------------------------------
-FROM node:22-alpine AS frontend
-WORKDIR /build
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
-COPY frontend/ ./
-# baseURL совпадает с FRONTEND_MOUNT у FastAPI; API — на том же origin.
-ENV NUXT_APP_BASE_URL=/app/
-ENV NUXT_PUBLIC_API_BASE=/api
-RUN npm run generate
-
-# --- 2. Рантайм: FastAPI + собранный фронт ------------------------------------
+# Только бэкенд; фронт собирается из frontend/Dockerfile.
 FROM python:3.12-slim
 WORKDIR /srv
 ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
@@ -19,10 +8,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 COPY pytest.ini ./
-COPY --from=frontend /build/.output/public ./frontend/.output/public
 
 ENV DB_PATH=/srv/data/attendance.db
+# 0.0.0.0 - чтобы порт был виден снаружи контейнера; наружу его отдаёт compose.
+ENV API_HOST=0.0.0.0 API_PORT=8000
 VOLUME ["/srv/data"]
 EXPOSE 8000
 
-CMD ["uvicorn", "app.web:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "app.cli", "serve"]

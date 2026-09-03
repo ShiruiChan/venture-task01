@@ -1,20 +1,17 @@
-"""HTTP-слой: серверный дашборд (Jinja2 + HTMX) и JSON-API."""
-from __future__ import annotations
-
-import asyncio
+"""JSON-API; дашборд (Nuxt) живёт отдельным процессом и ходит сюда по сети."""
 import logging
 from contextlib import asynccontextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
-from fastapi import Depends, FastAPI, Form, Query, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi import Depends, FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
-from . import analytics, charts, db, sync
-from .config import BASE_DIR, settings
-from .models import SOURCE_LASER, SOURCE_RARUS, SOURCE_TITLES, STATUS_TITLES
+from . import analytics, db, sync
+from .config import settings
+from .models import SOURCE_TITLES, STATUS_TITLES
 from .sources import RarusSource
 from .sources.base import SourceError
 
@@ -73,6 +70,14 @@ class PeriodParams:
         return "&".join(f"{k}={v}" for k, v in params.items())
 
 
+class MappingIn(BaseModel):
+    """Переназначение объекта источника на другое подразделение."""
+
+    source: str
+    external_id: str
+    division_id: int = Field(gt=0)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
@@ -88,9 +93,11 @@ async def lifespan(app: FastAPI):
             id="sync_all",
             max_instances=1,
             coalesce=True,
+            # без next_run_time interval-триггер ждёт целый интервал до первого сбора
+            next_run_time=datetime.now(),
         )
         scheduler.start()
-        log.info("Автосбор включён: каждые %s мин", settings.sync_interval_minutes)
+        log.info("Автосбор включён: сразу и далее каждые %s мин", settings.sync_interval_minutes)
     try:
         yield
     finally:
@@ -98,140 +105,27 @@ async def lifespan(app: FastAPI):
             scheduler.shutdown(wait=False)
 
 
-app = FastAPI(title="Посещаемость подразделений БМ", version="1.0.0", lifespan=lifespan)
-if settings.cors_origins:
-    from fastapi.middleware.cors import CORSMiddleware
+app = FastAPI(title="Посещаемость подразделений БМ - API", version="2.0.0", lifespan=lifespan)
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=list(settings.cors_origins),
-        allow_methods=["GET", "POST"],
-        allow_headers=["*"],
-    )
-app.mount("/static", StaticFiles(directory=BASE_DIR / "app" / "static"), name="static")
-templates = Jinja2Templates(directory=str(BASE_DIR / "app" / "templates"))
-templates.env.globals.update(
-    STATUS_TITLES=STATUS_TITLES,
-    SOURCE_TITLES=SOURCE_TITLES,
-    PRESETS=PRESETS,
-    settings=settings,
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=list(settings.cors_origins),
+    allow_origin_regex=settings.cors_origin_regex or None,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
 )
 
 
-def _fmt(value: Optional[float], digits: int = 0, plus: bool = False) -> str:
-    if value is None:
-        return "—"
-    text = f"{value:+,.{digits}f}" if plus else f"{value:,.{digits}f}"
-    return text.replace(",", " ")
-
-
-templates.env.filters["num"] = _fmt
-templates.env.filters["pct"] = lambda v: "—" if v is None else f"{v:+.1f} %".replace(".", ",")
-
-
-# --- страницы ------
-
-
-@app.get("/", response_class=HTMLResponse)
-async def dashboard(request: Request, period: PeriodParams = Depends()):
-    rows = analytics.build_comparison(period.day_from, period.day_to, period.division_id)
-    summary = analytics.summarize_divisions(rows)
-    totals = analytics.daily_totals(rows)
-    issues = analytics.discrepancies(rows)
-    return templates.TemplateResponse(
-        request,
-        "dashboard.html",
-        {
-            "period": period,
-            "divisions": db.list_divisions(),
-            "overall": analytics.overall(rows),
-            "summary": summary,
-            "issues": issues[:50],
-            "issues_total": len(issues),
-            "chart": charts.line_chart(
-                totals,
-                [("rarus", SOURCE_TITLES[SOURCE_RARUS], "s-rarus"), ("laser", SOURCE_TITLES[SOURCE_LASER], "s-laser")],
-            ),
-            "delta_chart": charts.bar_chart(summary, "mean_abs_pct", "division_name"),
-            "runs": db.recent_runs(5),
-            "data_range": db.data_range(),
-        },
-    )
-
-
-@app.get("/division/{division}", response_class=HTMLResponse)
-async def division_detail(request: Request, division: int, period: PeriodParams = Depends()):
-    # имя пути отличается от query-параметра division_id: FastAPI не допускает совпадения
-    division_id = division
-    rows = analytics.build_comparison(period.day_from, period.day_to, division_id, include_empty_days=True)
-    totals = analytics.daily_totals(rows)
-    division = next((d for d in db.list_divisions() if d.id == division_id), None)
-    th = settings.thresholds
-    return templates.TemplateResponse(
-        request,
-        "division.html",
-        {
-            "period": period,
-            "division": division,
-            "divisions": db.list_divisions(),
-            "rows": [
-                {
-                    "day": r.day,
-                    "rarus": r.rarus,
-                    "laser": r.laser,
-                    "delta": r.delta,
-                    "delta_pct": r.delta_pct,
-                    "status": r.status(th.warn_pct, th.critical_pct, th.min_abs),
-                }
-                for r in sorted(rows, key=lambda r: r.day, reverse=True)
-            ],
-            "overall": analytics.overall(rows),
-            "chart": charts.line_chart(
-                totals,
-                [("rarus", SOURCE_TITLES[SOURCE_RARUS], "s-rarus"), ("laser", SOURCE_TITLES[SOURCE_LASER], "s-laser")],
-            ),
-        },
-    )
-
-
-@app.get("/sources", response_class=HTMLResponse)
-async def sources_page(request: Request):
-    return templates.TemplateResponse(
-        request,
-        "sources.html",
-        {
-            "links": db.list_source_links(),
-            "divisions": db.list_divisions(),
-            "runs": db.recent_runs(30),
-            "laser_mode": settings.laser.mode,
-            "rarus_ready": settings.rarus.enabled,
-        },
-    )
-
-
-@app.post("/sync")
-async def trigger_sync(
-    request: Request,
-    days: int = Form(14),
-    redirect_to: str = Form("/"),
-):
-    day_from, day_to = sync.default_range(max(1, min(days, 400)))
-    await sync.sync_all(day_from, day_to)
-    return RedirectResponse(redirect_to, status_code=303)
-
-
-@app.post("/mapping")
-async def update_mapping(
-    source: str = Form(...),
-    external_id: str = Form(...),
-    division_id: int = Form(...),
-):
-    with db.connect() as conn:
-        db.remap_source_object(conn, source, external_id, division_id)
-    return RedirectResponse("/sources", status_code=303)
-
-
-# --- JSON API ------
+@app.get("/")
+async def root():
+    """Корень отдаёт паспорт сервиса, а не страницу: UI живёт отдельно."""
+    return {
+        "service": "attendance-api",
+        "version": app.version,
+        "docs": "/docs",
+        "health": "/health",
+        "api": "/api",
+    }
 
 
 @app.get("/health")
@@ -241,6 +135,20 @@ async def health():
         "status": "ok",
         "data_from": first,
         "data_to": last,
+        "laser_mode": settings.laser.mode,
+        "rarus_configured": settings.rarus.enabled,
+    }
+
+
+@app.get("/api/meta")
+async def api_meta():
+    """Справочники и пороги для фронта."""
+    th = settings.thresholds
+    return {
+        "presets": PRESETS,
+        "sources": SOURCE_TITLES,
+        "statuses": STATUS_TITLES,
+        "thresholds": {"warn_pct": th.warn_pct, "critical_pct": th.critical_pct, "min_abs": th.min_abs},
         "laser_mode": settings.laser.mode,
         "rarus_configured": settings.rarus.enabled,
     }
@@ -282,6 +190,25 @@ async def api_discrepancies(period: PeriodParams = Depends()):
     return analytics.discrepancies(rows)
 
 
+@app.get("/api/sources")
+async def api_sources():
+    """Сопоставление «объект источника - подразделение» и история запусков."""
+    return {
+        "links": db.list_source_links(),
+        "divisions": [d.__dict__ for d in db.list_divisions()],
+        "runs": db.recent_runs(30),
+        "laser_mode": settings.laser.mode,
+        "rarus_ready": settings.rarus.enabled,
+    }
+
+
+@app.post("/api/mapping")
+async def api_mapping(body: MappingIn):
+    with db.connect() as conn:
+        db.remap_source_object(conn, body.source, body.external_id, body.division_id)
+    return {"status": "ok", "links": db.list_source_links()}
+
+
 @app.post("/api/sync")
 async def api_sync(days: int = Query(14)):
     day_from, day_to = sync.default_range(max(1, min(days, 400)))
@@ -290,7 +217,7 @@ async def api_sync(days: int = Query(14)):
 
 @app.get("/api/rarus/hourly")
 async def api_rarus_hourly(day: Optional[str] = Query(None)):
-    """Прямой прокси виджета «Посещаемость по часам» — детализация внутри суток."""
+    """Прямой прокси виджета «Посещаемость по часам» - детализация внутри суток."""
     target = date.fromisoformat(day) if day else date.today()
     try:
         async with RarusSource(settings.rarus) as source:
@@ -302,15 +229,3 @@ async def api_rarus_hourly(day: Optional[str] = Query(None)):
 @app.get("/api/runs")
 async def api_runs(limit: int = Query(20, le=200)):
     return db.recent_runs(limit)
-
-
-# --- собранный Nuxt ------
-# Монтируется последним, чтобы не перехватывать API и серверные страницы.
-# html=True отдаёт index.html для вложенных путей SPA.
-if settings.frontend_dist.is_dir():
-    app.mount(
-        settings.frontend_mount,
-        StaticFiles(directory=settings.frontend_dist, html=True),
-        name="frontend",
-    )
-    log.info("Фронт раздаётся из %s на %s", settings.frontend_dist, settings.frontend_mount)

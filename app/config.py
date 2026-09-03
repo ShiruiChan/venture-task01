@@ -29,12 +29,7 @@ def _env(name: str, default: str = "") -> str:
 
 
 def _env_pairs(name: str) -> list[tuple[str, str]]:
-    """Разбирает список вида ``ключ=значение; ключ=значение``.
-
-    Разделитель — точка с запятой или перевод строки, но не запятая: запятых
-    хватает внутри названий подразделений («Планета Электро, Якутск, ...»).
-    Значение необязательно, тогда во второй элемент пары попадает пустая строка.
-    """
+    """Пары ``ключ=значение`` через ``;`` или перевод строки - в названиях подразделений есть запятые."""
     pairs: list[tuple[str, str]] = []
     for chunk in re.split(r"[;\n]", _env(name)):
         chunk = chunk.strip()
@@ -50,6 +45,15 @@ def _env_ints(name: str, default: tuple[int, ...]) -> tuple[int, ...]:
     return values or default
 
 
+def _env_path(name: str, default: Optional[Path] = None) -> Optional[Path]:
+    """Путь из окружения; относительный - от корня проекта, а не от cwd."""
+    value = _env(name)
+    if not value:
+        return default
+    path = Path(value).expanduser()
+    return path if path.is_absolute() else (BASE_DIR / path).resolve()
+
+
 def _env_float(name: str, default: float) -> float:
     try:
         return float(_env(name) or default)
@@ -59,8 +63,6 @@ def _env_float(name: str, default: float) -> float:
 
 @dataclass
 class RarusConfig:
-    """Доступ к API 1С-Рарус (backend.rarus-spp.ru)."""
-
     base_url: str = field(default_factory=lambda: _env("RARUS_BASE_URL", "https://backend.rarus-spp.ru"))
     user: str = field(default_factory=lambda: _env("RARUS_USER"))
     password: str = field(default_factory=lambda: _env("RARUS_PASSWORD"))
@@ -81,18 +83,7 @@ class CounterAddress:
 
 @dataclass
 class LaserConfig:
-    """Доступ к счётчикам посещаемости.
-
-    Режим задаётся ``LASER_MODE``:
-
-    ``guestance``
-        Счётчики «Посещаемость» (TIGRA electronic). Центрального API у них нет:
-        опрашивается каждое устройство по своему адресу из ``LASER_COUNTERS``.
-    ``http``
-        Гипотетический центральный REST API с посуточной агрегацией.
-    ``fixture``
-        Демо-режим: данные из data/laser_fixture.json либо детерминированная генерация.
-    """
+    """LASER_MODE: guestance - опрос счётчиков из LASER_COUNTERS, http - центральный API, fixture - демо."""
 
     mode: str = field(default_factory=lambda: _env("LASER_MODE", "fixture"))
     base_url: str = field(default_factory=lambda: _env("LASER_BASE_URL"))
@@ -104,31 +95,31 @@ class LaserConfig:
     password: str = field(default_factory=lambda: _env("LASER_PASSWORD"))
     login_path: str = field(default_factory=lambda: _env("LASER_LOGIN_PATH", "/login"))
     timeout: float = field(default_factory=lambda: _env_float("LASER_TIMEOUT", 30.0))
-    fixture_path: Path = field(default_factory=lambda: Path(_env("LASER_FIXTURE", str(DATA_DIR / "laser_fixture.json"))))
+    fixture_path: Path = field(default_factory=lambda: _env_path("LASER_FIXTURE", DATA_DIR / "laser_fixture.json"))
 
-    # --- режим guestance -------------------------------------------------
+    # режим guestance
     #: адреса счётчиков: ``192.168.0.70; guest.advrouter.asuscomm.com:8009=ТЦ Планета``
     counters: tuple[CounterAddress, ...] = field(
         default_factory=lambda: tuple(CounterAddress(host, label) for host, label in _env_pairs("LASER_COUNTERS") if host)
     )
-    #: соответствие «серийный номер счётчика — подразделение»: ``12345=Планета Электро, Якутск``
+    #: серийник → подразделение: ``12345=Планета Электро, Якутск``
     counter_names: dict[str, str] = field(
         default_factory=lambda: {serial: name for serial, name in _env_pairs("LASER_COUNTER_NAMES") if serial and name}
     )
-    #: каталог с выгруженными журналами ``<серийник>_journal.csv`` — работа без доступа к счётчикам
+    #: каталог с выгруженными журналами ``<серийник>_journal.csv`` - работа без доступа к счётчикам
     journal_dir: Optional[Path] = field(
-        default_factory=lambda: Path(_env("LASER_JOURNAL_DIR")) if _env("LASER_JOURNAL_DIR") else None
+        default_factory=lambda: _env_path("LASER_JOURNAL_DIR")
     )
     id_path: str = field(default_factory=lambda: _env("LASER_ID_PATH", "/id.xml"))
     #: путь к журналу; ``{days}`` заменяется на номер суток или диапазон (``d=a`` прошивка обрезает)
     journal_path: str = field(default_factory=lambda: _env("LASER_JOURNAL_PATH", "/journal.cgi?t=a&f=c&d={days}"))
     journal_encoding: str = field(default_factory=lambda: _env("LASER_JOURNAL_ENCODING", "cp1251"))
-    #: гостевая учётная запись счётчика (по умолчанию заводская guest:guest)
+    #: заводская гостевая учётка guest:guest
     counter_user: str = field(default_factory=lambda: _env("LASER_COUNTER_USER", "guest"))
     counter_password: str = field(default_factory=lambda: _env("LASER_COUNTER_PASSWORD", "guest"))
-    #: события журнала, по которым считается посещаемость (10 — EVENT_INNOW: вошло, присутствие, вышло)
+    #: события прохода (10 - EVENT_INNOW: вошло, присутствие, вышло)
     count_events: tuple[int, ...] = field(default_factory=lambda: _env_ints("LASER_JOURNAL_EVENTS", (10,)))
-    #: номера полей строки журнала со счётчиками входов и выходов (поле 3 — присутствие, не выходы)
+    #: номера полей строки журнала со счётчиками входов и выходов (поле 3 - присутствие, не выходы)
     entered_column: int = field(default_factory=lambda: int(_env_float("LASER_JOURNAL_IN_COLUMN", 2)))
     exited_column: int = field(default_factory=lambda: int(_env_float("LASER_JOURNAL_OUT_COLUMN", 4)))
 
@@ -150,23 +141,27 @@ class Thresholds:
 
 @dataclass
 class Settings:
-    db_path: Path = field(default_factory=lambda: Path(_env("DB_PATH", str(DATA_DIR / "attendance.db"))))
+    db_path: Path = field(default_factory=lambda: _env_path("DB_PATH", DATA_DIR / "attendance.db"))
     timezone_offset_hours: int = field(default_factory=lambda: int(_env_float("TZ_OFFSET_HOURS", 0)))
-    sync_interval_minutes: int = field(default_factory=lambda: int(_env_float("SYNC_INTERVAL_MINUTES", 60)))
+    sync_interval_minutes: int = field(default_factory=lambda: max(1, int(_env_float("SYNC_INTERVAL_MINUTES", 10))))
     sync_lookback_days: int = field(default_factory=lambda: int(_env_float("SYNC_LOOKBACK_DAYS", 14)))
     autosync: bool = field(default_factory=lambda: _env("AUTOSYNC", "1") not in ("0", "false", "no"))
     rarus: RarusConfig = field(default_factory=RarusConfig)
     laser: LaserConfig = field(default_factory=LaserConfig)
     thresholds: Thresholds = field(default_factory=Thresholds)
-    # Собранный Nuxt (`npm run generate`): если каталог есть — FastAPI раздаёт его сам.
-    frontend_dist: Path = field(
-        default_factory=lambda: Path(_env("FRONTEND_DIST", str(BASE_DIR / "frontend" / ".output" / "public")))
-    )
-    frontend_mount: str = field(default_factory=lambda: _env("FRONTEND_MOUNT", "/app"))
-    # Нужны, только если фронт живёт на отдельном домене.
+    # 127.0.0.1 по умолчанию, чтобы локальный запуск не торчал наружу; в контейнере API_HOST=0.0.0.0
+    host: str = field(default_factory=lambda: _env("API_HOST", "127.0.0.1"))
+    port: int = field(default_factory=lambda: int(_env_float("API_PORT", 8000)))
+    #: origin'ы фронта через запятую; ``*`` - любой источник (только для закрытого контура)
     cors_origins: tuple[str, ...] = field(
-        default_factory=lambda: tuple(x.strip() for x in _env("CORS_ORIGINS").split(",") if x.strip())
+        default_factory=lambda: tuple(
+            x.strip()
+            for x in _env("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(",")
+            if x.strip()
+        )
     )
+    #: Запасной вариант, когда домены фронта заранее не известны: ``https://.*\.example\.com``
+    cors_origin_regex: str = field(default_factory=lambda: _env("CORS_ORIGIN_REGEX"))
 
 
 settings = Settings()

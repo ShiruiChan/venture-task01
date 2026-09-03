@@ -1,8 +1,4 @@
-"""Единый интерфейс источника данных о посещаемости.
-
-Любой новый источник (Лазер, 1С-Рарус, ручная выгрузка) реализует этот протокол,
-после чего автоматически попадает в сбор, хранение и сравнение.
-"""
+"""Протокол источника данных о посещаемости."""
 from __future__ import annotations
 
 from datetime import date
@@ -17,9 +13,8 @@ class SourceError(RuntimeError):
 
 @runtime_checkable
 class VisitorSource(Protocol):
-    #: короткий код источника, совпадает со значением в БД (rarus / laser)
+    #: код источника, как в БД (rarus / laser)
     code: str
-    #: человекочитаемое название
     title: str
 
     async def list_objects(self) -> list[SourceObject]:

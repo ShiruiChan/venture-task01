@@ -4,8 +4,10 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   runtimeConfig: {
     public: {
-      // в проде фронт ходит на тот же origin, что и FastAPI
+      // по умолчанию относительный /api: в dev проксирует nitro, в проде nginx
       apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api',
+      // минуты между обновлениями, вшивается в сборку; 0 отключает
+      refreshMinutes: Number(process.env.NUXT_PUBLIC_REFRESH_MINUTES ?? 10),
     },
   },
   nitro: {
@@ -17,8 +19,7 @@ export default defineNuxtConfig({
     },
   },
   app: {
-    // Совпадает с FRONTEND_MOUNT у FastAPI; для отдельного хостинга — '/'.
-    baseURL: process.env.NUXT_APP_BASE_URL || '/app/',
+    baseURL: process.env.NUXT_APP_BASE_URL || '/',
     head: {
       title: 'Сравнение датчиков подсчета',
       htmlAttrs: { lang: 'ru' },

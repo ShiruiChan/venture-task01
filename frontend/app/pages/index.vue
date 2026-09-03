@@ -1,11 +1,24 @@
 <script setup lang="ts">
 import { dailyTotals, type ComparisonResponse } from '~/composables/useComparison'
-import { formatDate, previousPeriod, resolvePeriod, type PresetKey } from '~/composables/usePeriod'
+import { customPeriod, formatDate, previousPeriod, resolvePeriod, type Period, type PresetKey } from '~/composables/usePeriod'
 
 const preset = ref<PresetKey>('week')
 const offset = ref(0)
 
-const period = computed(() => resolvePeriod(preset.value, offset.value))
+// произвольный период: даты для input[type=date], ISO-строки
+const customFrom = ref('')
+const customTo = ref('')
+
+// пока у custom заполнены не обе даты - остаёмся на прежнем периоде,
+// чтобы не уходил запрос с пустыми границами
+const period = computed<Period>((prev) => {
+  if (preset.value === 'custom') {
+    if (!customFrom.value || !customTo.value) return prev ?? resolvePeriod('week')
+    // T00:00:00 - чтобы дата разобралась в локальной зоне, а не в UTC
+    return customPeriod(new Date(`${customFrom.value}T00:00:00`), new Date(`${customTo.value}T00:00:00`))
+  }
+  return resolvePeriod(preset.value, offset.value)
+})
 
 const { fetchPeriod } = useComparisonApi()
 
@@ -24,11 +37,20 @@ const { data, pending, error, refresh } = await useAsyncData<{
   { watch: [period], server: false },
 )
 
+// обновляется и по таймеру, и по кнопке
+const updatedAt = ref<Date | null>(null)
+watch(data, (value) => {
+  if (value) updatedAt.value = new Date()
+}, { immediate: true })
+
+const { public: runtime } = useRuntimeConfig()
+useAutoRefresh(() => refresh(), Number(runtime.refreshMinutes))
+
 const points = computed(() => (data.value ? dailyTotals(data.value.current.rows, period.value) : []))
 
 const overall = computed(() => data.value?.current.overall ?? null)
 
-function trend(source: 'rarus_total' | 'laser_total'): number | null {
+function trend(source: 'rarus_total' | 'laser_total' | 'delta'): number | null {
   const now = data.value?.current.overall?.[source]
   const before = data.value?.previous.overall?.[source]
   if (!now || !before) return null
@@ -42,7 +64,7 @@ const caption = computed(() => (isSingleDay.value ? 'человек за ден�
 const dateLabel = computed(() =>
   isSingleDay.value
     ? formatDate(period.value.to)
-    : `${formatDate(period.value.from)} — ${formatDate(period.value.to)}`,
+    : `${formatDate(period.value.from)} - ${formatDate(period.value.to)}`,
 )
 
 function select(key: PresetKey) {
@@ -63,6 +85,7 @@ function shift(delta: number) {
 
     <main class="page__body">
       <PeriodBar :preset="preset" :offset="offset" :label="dateLabel" :loading="pending"
+                 :updated-at="updatedAt" v-model:custom-from="customFrom" v-model:custom-to="customTo"
                  @select="select" @shift="shift" @refresh="refresh()" />
 
       <p v-if="error" class="error">
@@ -73,9 +96,12 @@ function shift(delta: number) {
         <SensorCard title="Лазерный датчик" hint="Счётчики «Посещаемость»: проходы из журнала событий"
                     :value="overall?.laser_total ?? null" :caption="caption" :trend="trend('laser_total')"
                     color="var(--laser)" :series="points.map((p) => p.laser)" :loading="pending" />
-        <SensorCard title="1С-Рарус" hint="Данные API 1С-Рарус — база для сравнения"
+        <SensorCard title="1С-Рарус" hint="Данные API 1С-Рарус - база для сравнения"
                     :value="overall?.rarus_total ?? null" :caption="caption" :trend="trend('rarus_total')"
                     color="var(--rarus)" :series="points.map((p) => p.rarus)" :loading="pending" />
+        <SensorCard title="Разница" hint="Разница между данными Лазерного датчика и 1С-Рарус"
+                    :value="overall?.delta ?? null" :caption="caption" :trend="trend('delta')"
+                    color="var(--delta)" :series="points.map((p) => p.delta)" :loading="pending" />
       </div>
 
       <DynamicsChart :points="points" />
@@ -109,7 +135,7 @@ function shift(delta: number) {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
 }
 

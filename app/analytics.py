@@ -74,7 +74,7 @@ def summarize_divisions(rows: list[ComparisonRow], thresholds: Optional[Threshol
 
         delta = laser_total - rarus_total if rarus_total is not None and laser_total is not None else None
         delta_pct = (delta / max(abs(rarus_total), 1) * 100.0) if delta is not None else None
-        # средний модуль дневного расхождения — не даёт плюсам и минусам гасить друг друга
+        # средний модуль дневного расхождения - не даёт плюсам и минусам гасить друг друга
         mape = (
             sum(abs(r.delta_pct or 0.0) for r in both) / len(both) if both else None
         )

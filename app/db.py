@@ -83,9 +83,6 @@ def init_db(db_path: Optional[Path] = None) -> None:
         conn.executescript(SCHEMA)
 
 
-# --- подразделения -
-
-
 def split_name(name: str) -> tuple[str, str]:
     """«Планета Электро, Якутск, Бестужева-Марлинского 64-1» → (город, адрес)."""
     parts = [p.strip() for p in name.split(",")]
@@ -126,12 +123,7 @@ def link_source_object(conn: sqlite3.Connection, source: str, external_id: str, 
 
 
 def remap_source_object(conn: sqlite3.Connection, source: str, external_id: str, division_id: int) -> None:
-    """Ручная привязка объекта источника к другому подразделению (сведение справочников).
-
-    Уже собранные показатели переносятся на новое подразделение. ``UPDATE OR REPLACE``
-    нужен на случай, когда за те же сутки у целевого подразделения уже есть значение
-    этого источника: побеждает переносимая строка.
-    """
+    """Переносит объект источника на другое подразделение вместе с собранными показателями."""
     row = conn.execute(
         "SELECT division_id FROM source_links WHERE source = ? AND external_id = ?",
         (source, external_id),
@@ -139,6 +131,7 @@ def remap_source_object(conn: sqlite3.Connection, source: str, external_id: str,
     if row is None or int(row["division_id"]) == division_id:
         return
     old_division_id = int(row["division_id"])
+    # OR REPLACE: при конфликте за те же сутки побеждает переносимая строка
     conn.execute(
         "UPDATE OR REPLACE daily_counts SET division_id = ? WHERE source = ? AND division_id = ?",
         (division_id, source, old_division_id),
@@ -147,8 +140,7 @@ def remap_source_object(conn: sqlite3.Connection, source: str, external_id: str,
         "UPDATE source_links SET division_id = ? WHERE source = ? AND external_id = ?",
         (division_id, source, external_id),
     )
-    # подразделение, оставшееся без источников и без данных, удаляем — иначе оно
-    # висит в фильтрах дашборда пустой строкой
+    # осиротевшее подразделение удаляем, иначе висит пустой строкой в фильтрах дашборда
     orphan = conn.execute(
         "SELECT 1 FROM source_links WHERE division_id = ? "
         "UNION ALL SELECT 1 FROM daily_counts WHERE division_id = ? LIMIT 1",
@@ -179,9 +171,6 @@ def list_source_links(conn: Optional[sqlite3.Connection] = None) -> list[dict[st
         return [dict(r) for r in conn.execute(sql).fetchall()]
     with connect() as c:
         return [dict(r) for r in c.execute(sql).fetchall()]
-
-
-# --- показатели ----
 
 
 def save_counts(source: str, counts: Iterable[DailyCount], db_path: Optional[Path] = None) -> int:
@@ -234,9 +223,6 @@ def data_range(db_path: Optional[Path] = None) -> tuple[Optional[str], Optional[
     with connect(db_path) as conn:
         row = conn.execute("SELECT MIN(day) AS a, MAX(day) AS b FROM daily_counts").fetchone()
     return (row["a"], row["b"]) if row else (None, None)
-
-
-# --- журнал сборов -
 
 
 def start_run(source: str, day_from: date, day_to: date, db_path: Optional[Path] = None) -> int:

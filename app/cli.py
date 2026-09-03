@@ -1,4 +1,4 @@
-"""Командный интерфейс: сбор данных, выгрузка отчёта, запуск веб-сервиса."""
+"""Командный интерфейс: сбор данных, выгрузка отчёта, запуск API-сервера."""
 from __future__ import annotations
 
 import argparse
@@ -22,7 +22,7 @@ def _period(args: argparse.Namespace) -> tuple[date, date]:
 
 def cmd_sync(args: argparse.Namespace) -> int:
     day_from, day_to = _period(args)
-    print(f"Сбор за {day_from} — {day_to}")
+    print(f"Сбор за {day_from} - {day_to}")
     results = asyncio.run(sync.sync_all(day_from, day_to))
     failed = False
     marks = {"ok": "ok", "partial": "часть"}
@@ -71,7 +71,7 @@ def cmd_report(args: argparse.Namespace) -> int:
         return 0
 
     overall = analytics.overall(rows)
-    print(f"Период {day_from} — {day_to}: подразделений {overall['divisions']}, записей {overall['rows']}")
+    print(f"Период {day_from} - {day_to}: подразделений {overall['divisions']}, записей {overall['rows']}")
     print(
         f"1С-Рарус {overall['rarus_total']}, Лазер {overall['laser_total']}, "
         f"расхождение {overall['delta']:+} ({overall['delta_pct']:+.1f} %), "
@@ -98,6 +98,7 @@ def cmd_report(args: argparse.Namespace) -> int:
 def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
+    print(f"API на http://{args.host}:{args.port} (фронт поднимается отдельно)")
     uvicorn.run("app.web:app", host=args.host, port=args.port, reload=args.reload)
     return 0
 
@@ -121,9 +122,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_report.add_argument("--division-id", type=int, dest="division_id")
     p_report.set_defaults(func=cmd_report)
 
-    p_serve = sub.add_parser("serve", help="запустить веб-сервис")
-    p_serve.add_argument("--host", default="127.0.0.1")
-    p_serve.add_argument("--port", type=int, default=8000)
+    p_serve = sub.add_parser("serve", help="запустить API-сервер (без фронта)")
+    p_serve.add_argument("--host", default=settings.host, help="по умолчанию API_HOST")
+    p_serve.add_argument("--port", type=int, default=settings.port, help="по умолчанию API_PORT")
     p_serve.add_argument("--reload", action="store_true")
     p_serve.set_defaults(func=cmd_serve)
     return parser

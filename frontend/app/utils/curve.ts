@@ -1,9 +1,6 @@
 export interface Pt { x: number; y: number }
 
-/**
- * Сглаженная кривая через все точки: Catmull-Rom, переписанный в кубические Безье.
- * tension 0 — ломаная, 1 — заметные дуги; 0.5 повторяет вид макета.
- */
+/** Catmull-Rom через кубические Безье; tension 0 - ломаная. */
 export function smoothPath(points: Pt[], tension = 0.5): string {
   if (points.length === 0) return ''
   if (points.length === 1) return `M ${points[0]!.x} ${points[0]!.y}`
@@ -29,7 +26,7 @@ export function niceTicks(max: number, count = 5): number[] {
   const rough = max / count
   const magnitude = 10 ** Math.floor(Math.log10(rough))
   const step = [1, 2, 5, 10].map((m) => m * magnitude).find((s) => s >= rough) ?? magnitude * 10
-  // верхнее деление всегда накрывает максимум, иначе кривая уходит за сетку
+  // верхнее деление накрывает максимум, иначе кривая уходит за сетку
   const top = Math.ceil(max / step) * step
   const ticks: number[] = []
   for (let value = 0; value <= top + step / 2; value += step) ticks.push(value)
@@ -37,6 +34,6 @@ export function niceTicks(max: number, count = 5): number[] {
 }
 
 export function formatNumber(value: number | null | undefined): string {
-  if (value === null || value === undefined || Number.isNaN(value)) return '—'
+  if (value === null || value === undefined || Number.isNaN(value)) return '-'
   return Math.round(value).toLocaleString('ru-RU').replace(/ /g, ' ')
 }

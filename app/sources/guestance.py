@@ -1,38 +1,14 @@
-"""Коннектор к счётчикам посещаемости «Посещаемость» (TIGRA electronic).
+"""Счётчики «Посещаемость» (TIGRA electronic): центрального API нет, каждое
+устройство опрашивается по HTTP под гостевой учёткой (заводская guest:guest).
 
-Центрального API у этих счётчиков нет: каждое устройство отдаёт данные само,
-по HTTP со своего адреса, под гостевой учётной записью (по умолчанию
-``guest:guest``)::
+GET /id.xml - серийник; GET /journal.cgi?t=a&f=c&d=<дни> - журнал, CSV в CP1251.
+``d`` - номер суток от 1970-01-01 либо диапазон; ``d=a`` («весь журнал») прошивка
+обрезает. Нулевой год в дате - время в счётчике не установлено, строка отбрасывается.
+Посещаемость - событие 10 (EVENT_INNOW) с полями «вошло, присутствие, вышло»
+(порядок из прошивки, js_160424.js), поэтому выходы - поле 4, а не 3; на других
+прошивках проход может идти событием 11 (EVENT_INOUT), отсюда настройки полей.
 
-    GET /id.xml                        -> <serial>NNN</serial>
-    GET /journal.cgi?t=a&f=c&d=<дни>   -> журнал событий, CSV в кодировке CP1251
-
-Параметр ``d`` — номер суток от 1970-01-01 либо диапазон ``первые-последние``.
-Значение ``d=a`` («весь журнал») брать нельзя: прошивка обрезает такую выгрузку
-и на живом счётчике в ней не хватало последних трёх месяцев. Поэтому дни
-подставляются в ``LASER_JOURNAL_PATH`` вместо ``{days}``.
-
-Строка журнала::
-
-    ДД/ММ/ГГ ЧЧ:ММ,<код события>,<поле2>,<поле3>,...
-
-Год двузначный, ``00`` в позиции года означает, что время в счётчике не
-установлено — такие строки отбрасываются. Посещаемость считается по событию
-``EVENT_INNOW = 10``, у него три поля — ``вошло, присутствие, вышло``::
-
-    31/08/26 14:10,10,13,10,7
-
-Порядок полей взят из прошивки счётчика (``js_160424.js``, ``Journal.Zf`` и
-описание события 10), поэтому «вышло» — это поле 4, а не 3. Набор событий и
-номера полей всё равно вынесены в настройки (``LASER_JOURNAL_EVENTS``,
-``LASER_JOURNAL_IN_COLUMN``, ``LASER_JOURNAL_OUT_COLUMN``): на других прошивках
-проход может приходить событием ``EVENT_INOUT = 11`` с полями ``вошло, вышло``.
-
-Счётчики опрашиваются параллельно; недоступный счётчик не срывает сбор, его
-адрес попадает в ``errors``.
-
-Описание протокола и эталонный PHP-скрипт:
-https://tigra-electronic.com/articles/guestance-multithread-communication.html
+Протокол: https://tigra-electronic.com/articles/guestance-multithread-communication.html
 """
 from __future__ import annotations
 
@@ -55,7 +31,7 @@ from .base import SourceError
 
 log = logging.getLogger("attendance.guestance")
 
-# коды событий из руководства по эксплуатации «Посещаемость»
+# коды событий из руководства по эксплуатации
 EVENT_ON = 1
 EVENT_OFF = 2
 EVENT_TIME = 3
@@ -89,14 +65,12 @@ def _days_param(day_from: Optional[date], day_to: Optional[date]) -> str:
 
 
 def _reason(exc: BaseException) -> str:
-    """Текст исключения; у таймаутов httpx он пустой — тогда имя класса."""
+    """Текст исключения; у таймаутов httpx он пустой - тогда имя класса."""
     return str(exc) or type(exc).__name__
 
 
 @dataclass(frozen=True)
 class JournalRow:
-    """Одна разобранная строка журнала счётчика."""
-
     moment: datetime
     event: int
     fields: tuple[str, ...]
@@ -113,18 +87,14 @@ class JournalRow:
 
 
 def parse_moment(text: str) -> Optional[datetime]:
-    """``ДД/ММ/ГГ ЧЧ:ММ`` (и терпимо — ``ГГГГ/ММ/ДД``) в datetime.
-
-    ``None`` — если формат не распознан или год нулевой: по документации
-    производителя это значит, что время в счётчике не установлено.
-    """
+    """``ДД/ММ/ГГ ЧЧ:ММ`` (терпимо и к ``ГГГГ/ММ/ДД``); нулевой год - время не установлено, None."""
     match = _MOMENT_RE.match(text)
     if not match:
         return None
     first, second, third, hour, minute, second_of_minute = match.groups()
     if len(first) == 4:  # ГГГГ/ММ/ДД
         year, month, day = int(first), int(second), int(third)
-    else:  # ДД/ММ/ГГ — основной формат счётчика
+    else:  # ДД/ММ/ГГ - основной формат счётчика
         day, month, year = int(first), int(second), int(third)
         if year == 0:
             return None
@@ -219,10 +189,8 @@ class GuestanceSource:
         """Название подразделения для счётчика: карта серийников, затем подпись адреса."""
         return self.config.counter_names.get(serial) or label or f"Счётчик {serial}"
 
-    # --- интерфейс VisitorSource ----------------------------------------
-
     async def list_objects(self) -> list[SourceObject]:
-        today = date.today()  # журнал нужен только ради серийника — берём одни сутки
+        today = date.today()  # журнал нужен только ради серийника - берём одни сутки
         return [
             SourceObject(external_id=serial, name=self.division_name(serial, label), raw={"host": host})
             for serial, label, host, _ in await self._collect(today, today)
@@ -244,8 +212,6 @@ class GuestanceSource:
                 )
             )
         return [c for c in counts if day_from <= c.day <= day_to]
-
-    # --- получение журналов ----------------------------------------------
 
     async def _collect(
         self, day_from: Optional[date] = None, day_to: Optional[date] = None
@@ -269,7 +235,7 @@ class GuestanceSource:
                 continue
             collected.append(result)
         if not collected:
-            raise SourceError("Ни один счётчик не ответил — " + "; ".join(self.errors))
+            raise SourceError("Ни один счётчик не ответил - " + "; ".join(self.errors))
         return collected
 
     def _read_dir(self, directory: Path) -> list[tuple[str, str, str, str]]:
@@ -301,7 +267,7 @@ class GuestanceSource:
         try:
             response = await self.client.get(host + path, headers=headers, timeout=self.config.timeout)
         except httpx.HTTPError as exc:
-            raise SourceError(f"{path} — {_reason(exc)}") from exc
+            raise SourceError(f"{path} - {_reason(exc)}") from exc
         if response.status_code >= 400:
-            raise SourceError(f"{path} — HTTP {response.status_code}")
+            raise SourceError(f"{path} - HTTP {response.status_code}")
         return response.content.decode(self.config.journal_encoding, errors="replace")

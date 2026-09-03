@@ -15,7 +15,7 @@ def test_status_thresholds():
     assert ComparisonRow(1, "X", date(2026, 8, 1), 100, None).status(5, 15, 5) == "missing_laser"
     # счётчик прислал сутки, но не насчитал ни одного прохода
     assert ComparisonRow(1, "X", date(2026, 8, 1), 700, 0).status(5, 15, 5) == "idle_laser"
-    # закрытый день: ноль у обоих — это не молчание счётчика
+    # закрытый день: ноль у обоих - это не молчание счётчика
     assert ComparisonRow(1, "X", date(2026, 8, 1), 0, 0).status(5, 15, 5) == "ok"
 
 
@@ -78,5 +78,5 @@ def test_idle_counter_days_do_not_spoil_the_average(temp_db):
     summary = analytics.summarize_divisions(rows)[0]
     assert summary["idle_days"] == 1 and summary["days_matched"] == 1
     assert round(summary["mean_abs_pct"], 1) == 10.0
-    # суммы по источникам остаются как есть — они честно показывают провал
+    # суммы по источникам не корректируются
     assert summary["laser_total"] == 610 and summary["rarus_total"] == 1351

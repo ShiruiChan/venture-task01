@@ -1,15 +1,9 @@
-"""Коннектор к системе 1С-Рарус (backend.rarus-spp.ru).
+"""Коннектор к 1С-Рарус (backend.rarus-spp.ru).
 
-Особенности API, выявленные при обследовании:
-
-* авторизация - POST /login, ``application/x-www-form-urlencoded``; в ответе
-  ``access_token`` (PASETO v2) и ``expire_at`` в миллисекундах;
-* виджеты принимают только ``period=day`` и ``period=week``; произвольного
-  интервала нет, поэтому история собирается пошагово, по суткам;
-* разрез по подразделениям даёт только виджет ``objects-rating`` —
-  ``series[].label`` содержит название объекта, ``total_current`` — число вошедших;
-* ``series[].id`` у этого клиента всегда нулевой GUID, поэтому идентификатором
-  объекта служит нормализованное название.
+Виджеты принимают только period=day|week, произвольного интервала нет - история
+собирается по суткам. Разрез по подразделениям даёт лишь виджет objects-rating;
+series[].id у этого клиента всегда нулевой GUID, так что идентификатором объекта
+служит нормализованное название.
 """
 from __future__ import annotations
 
@@ -28,7 +22,7 @@ ZERO_GUID = "00000000-0000-0000-0000-000000000000"
 
 
 def day_to_ms(day: date) -> int:
-    """Полночь UTC указанных суток в миллисекундах — формат параметра ``date``."""
+    """Полночь UTC указанных суток в миллисекундах - формат параметра ``date``."""
     return int(datetime(day.year, day.month, day.day, tzinfo=timezone.utc).timestamp() * 1000)
 
 
@@ -76,8 +70,6 @@ class RarusSource:
             self._client = httpx.AsyncClient(base_url=self.config.base_url, timeout=self.config.timeout)
         return self._client
 
-    # --- авторизация -----------------------------------------------------
-
     async def _authorize(self) -> str:
         if not self.config.enabled:
             raise SourceError("Не заданы учётные данные 1С-Рарус (RARUS_USER / RARUS_PASSWORD)")
@@ -101,19 +93,17 @@ class RarusSource:
                 return self._token
             return await self._authorize()
 
-    # --- низкоуровневые запросы -----------------------------------------
-
     @staticmethod
     def _payload(response: httpx.Response, what: str) -> dict[str, Any]:
         if response.status_code >= 400:
-            raise SourceError(f"1С-Рарус: {what} — HTTP {response.status_code}")
+            raise SourceError(f"1С-Рарус: {what} - HTTP {response.status_code}")
         try:
             body = response.json()
         except ValueError as exc:
-            raise SourceError(f"1С-Рарус: {what} — некорректный JSON") from exc
+            raise SourceError(f"1С-Рарус: {what} - некорректный JSON") from exc
         if not body.get("success"):
             error = body.get("error") or {}
-            raise SourceError(f"1С-Рарус: {what} — {body.get('message')} ({error.get('reason', '')})".strip())
+            raise SourceError(f"1С-Рарус: {what} - {body.get('message')} ({error.get('reason', '')})".strip())
         return body.get("data") or {}
 
     async def widget(self, name: str, period: str = "day", day: Optional[date] = None) -> dict[str, Any]:
@@ -138,8 +128,6 @@ class RarusSource:
                     continue
                 raise
         raise SourceError(f"1С-Рарус: виджет {name} недоступен")
-
-    # --- интерфейс VisitorSource ----------------------------------------
 
     async def list_objects(self) -> list[SourceObject]:
         data = await self.widget("objects-rating", "day", date.today())
@@ -180,10 +168,8 @@ class RarusSource:
             )
         return counts
 
-    # --- дополнительные виджеты для дашборда -----------------------------
-
     async def fetch_today_totals(self, day: Optional[date] = None) -> dict[str, float]:
-        """Виджет «Вошло/вышло сегодня» — сводные показатели клиента."""
+        """Виджет «Вошло/вышло сегодня» - сводные показатели клиента."""
         data = await self.widget("today", "day", day)
         return {
             normalize_name(s.get("label", "")): float(s.get("total_current") or 0)

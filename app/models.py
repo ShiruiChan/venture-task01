@@ -33,8 +33,6 @@ class DailyCount:
 
 @dataclass
 class Division:
-    """Подразделение БМ в единой номенклатуре сервиса."""
-
     id: int
     name: str
     city: str = ""
@@ -77,8 +75,7 @@ class ComparisonRow:
         pct = abs(self.delta_pct or 0.0)
         if delta < min_abs:
             return "ok"
-        # счётчик прислал сутки, но не насчитал ни одного прохода — это его молчание,
-        # а не расхождение источников: сравнивать тут нечего
+        # ноль при живом Рарусе - молчание счётчика, а не расхождение
         if self.laser == 0:
             return "idle_laser"
         if pct >= critical_pct:

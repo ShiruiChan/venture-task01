@@ -12,7 +12,7 @@ from app.sources.guestance import daily_counts, parse_journal, parse_moment
 JOURNAL = (
     "20/02/19 12:31,10,5,4,3\r\n"
     "20/02/19 12:32,10,7,6,2\r\n"
-    "20/02/19 12:33,11,40,0,0\r\n"  # EVENT_INOUT — в посещаемость не идёт
+    "20/02/19 12:33,11,40,0,0\r\n"  # EVENT_INOUT - в посещаемость не идёт
     "20/02/19 12:34,5,0,0,0\r\n"  # вход в настройки счётчика
     "\r\n"
     "21/02/19 09:05,10,1,1,1\r\n"
@@ -37,7 +37,7 @@ def make_source(transport: httpx.MockTransport, **kw) -> GuestanceSource:
 
 
 def test_parse_moment_reads_counter_format():
-    # основной формат счётчика — ДД/ММ/ГГ
+    # основной формат счётчика - ДД/ММ/ГГ
     assert parse_moment("20/02/19 12:31") == __import__("datetime").datetime(2019, 2, 20, 12, 31)
     # четырёхзначное начало трактуется как ГГГГ/ММ/ДД
     assert parse_moment("2019/02/20 12:31:45").day == 20
@@ -76,9 +76,9 @@ async def test_fetch_daily_reads_serial_then_journal():
         counts = await source.fetch_daily(date(2019, 2, 20), date(2019, 2, 21))
 
     assert [r.url.path for r in requests] == ["/id.xml", "/journal.cgi"]
-    # d — номера суток от 1970-01-01: 20 и 21 февраля 2019 года
+    # d - номера суток от 1970-01-01: 20 и 21 февраля 2019 года
     assert dict(requests[1].url.params) == {"t": "a", "f": "c", "d": "17947-17948"}
-    # гостевая учётная запись счётчика по умолчанию — guest:guest
+    # гостевая учётная запись счётчика по умолчанию - guest:guest
     assert requests[0].headers["authorization"] == "Basic Z3Vlc3Q6Z3Vlc3Q="
     assert [(c.external_id, c.name, c.entered) for c in counts] == [
         ("1234567", "ТЦ Планета", 12),

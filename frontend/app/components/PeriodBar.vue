@@ -1,23 +1,39 @@
 <script setup lang="ts">
-import { PRESET_TITLES, type PresetKey } from '~/composables/usePeriod'
+import { PRESET_TITLES, toISO, type PresetKey } from '~/composables/usePeriod'
 
 const props = defineProps<{
   preset: PresetKey
   offset: number
   label: string
   loading?: boolean
+  /** время последней удачной загрузки */
+  updatedAt?: Date | null
+  /** границы произвольного периода, ISO-строки для input[type=date] */
+  customFrom?: string
+  customTo?: string
 }>()
 
 const emit = defineEmits<{
   (e: 'select', preset: PresetKey): void
   (e: 'shift', delta: number): void
   (e: 'refresh'): void
+  (e: 'update:customFrom', value: string): void
+  (e: 'update:customTo', value: string): void
 }>()
 
 const simple: PresetKey[] = ['today', 'yesterday', 'week']
 const steppable: PresetKey[] = ['month', 'year']
 
+const todayISO = toISO(new Date())
+
 const canGoForward = computed(() => props.offset > 0)
+
+const updatedLabel = computed(() => {
+  if (!props.updatedAt) return ''
+  const hours = `${props.updatedAt.getHours()}`.padStart(2, '0')
+  const minutes = `${props.updatedAt.getMinutes()}`.padStart(2, '0')
+  return `${hours}:${minutes}`
+})
 </script>
 
 <template>
@@ -59,6 +75,21 @@ const canGoForward = computed(() => props.offset > 0)
         </svg>
       </button>
     </div>
+
+    <button type="button" class="btn" :class="{ 'is-active': preset === 'custom' }"
+            @click="emit('select', 'custom')">
+      {{ PRESET_TITLES.custom }}
+    </button>
+
+    <template v-if="preset === 'custom'">
+      <input class="bar__input" type="date" :value="customFrom" :max="todayISO" aria-label="Начало периода"
+             @change="emit('update:customFrom', ($event.target as HTMLInputElement).value)">
+      <span class="bar__dash" aria-hidden="true">-</span>
+      <input class="bar__input" type="date" :value="customTo" :max="todayISO" aria-label="Конец периода"
+             @change="emit('update:customTo', ($event.target as HTMLInputElement).value)">
+    </template>
+
+    <span v-if="updatedLabel" class="bar__updated">обновлено в {{ updatedLabel }}</span>
   </div>
 </template>
 
@@ -100,6 +131,13 @@ const canGoForward = computed(() => props.offset > 0)
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
+.bar__updated {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .bar__value {
   font-size: 14px;
   font-weight: 500;
@@ -140,6 +178,23 @@ const canGoForward = computed(() => props.offset > 0)
   display: flex;
   align-items: center;
   gap: 4px;
+}
+
+.bar__input {
+  height: 38px;
+  padding: 0 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  font: inherit;
+  font-size: 14px;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.bar__dash {
+  color: var(--muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

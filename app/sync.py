@@ -27,7 +27,7 @@ async def sync_rarus(day_from: date, day_to: date) -> dict[str, Any]:
         saved = db.save_counts(SOURCE_RARUS, counts)
         db.finish_run(run_id, "ok", saved)
         return {"source": SOURCE_RARUS, "status": "ok", "rows": saved}
-    except Exception as exc:  # журналируем любую причину сбоя, сбор не должен ронять сервис
+    except Exception as exc:  # сбор не должен ронять сервис
         log.exception("Сбой сбора 1С-Рарус")
         db.finish_run(run_id, "error", 0, str(exc))
         return {"source": SOURCE_RARUS, "status": "error", "rows": 0, "message": str(exc)}
@@ -54,7 +54,6 @@ def _rarus_baseline(day_from: date, day_to: date) -> list[SourceObject]:
 
 
 async def sync_laser(day_from: date, day_to: date) -> dict[str, Any]:
-    """Сбор посещаемости счётчиков. Класс источника выбирается режимом ``LASER_MODE``."""
     run_id = db.start_run(SOURCE_LASER, day_from, day_to)
     mode = settings.laser.mode
     try:
@@ -71,7 +70,7 @@ async def sync_laser(day_from: date, day_to: date) -> dict[str, Any]:
             notes.append("демо-данные (доступы к счётчикам не заданы)")
         unreachable = list(getattr(source, "errors", []))
         for message in unreachable:
-            notes.append(f"счётчик недоступен — {message}")
+            notes.append(f"счётчик недоступен - {message}")
         note = "; ".join(notes)
         # часть счётчиков молчит: данные собраны не полностью, и это не «ok»
         status = "partial" if unreachable else "ok"

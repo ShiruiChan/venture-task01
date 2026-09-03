@@ -1,15 +1,39 @@
+# api и web независимы, каждый поднимается сам по себе.
 services:
-  attendance:
+  api:
     build: .
-    image: attendance-dashboard
+    image: attendance-api
     restart: unless-stopped
-    # host-сеть нужна, чтобы контейнер видел счётчики и 1С в локальной сети.
-    # На Linux можно заменить на network_mode: host и убрать ports.
+    # Если из контейнера не видно счётчики/1С в локалке - на Linux
+    # заменить ports на network_mode: host.
     ports:
       - "8000:8000"
     env_file:
       - .env
     environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
       DB_PATH: /srv/data/attendance.db
     volumes:
       - ./data:/srv/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Вшивается в статику на этапе сборки; /api проксирует nginx (frontend/nginx.conf).
+        NUXT_PUBLIC_API_BASE: ${NUXT_PUBLIC_API_BASE:-/api}
+        # Шаг автообновления дашборда в минутах, 0 - только вручную. Тоже вшивается в сборку.
+        NUXT_PUBLIC_REFRESH_MINUTES: ${NUXT_PUBLIC_REFRESH_MINUTES:-10}
+    image: attendance-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    # depends_on намеренно нет: адрес api резолвится в момент запроса,
+    # фронт живёт и без бэкенда.
