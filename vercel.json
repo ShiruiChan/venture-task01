@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "installCommand": "npm --prefix frontend ci",
-  "buildCommand": "NUXT_APP_BASE_URL=/ NITRO_PRESET=static npm --prefix frontend run generate",
+  "buildCommand": "NUXT_APP_BASE_URL=/ NUXT_PUBLIC_API_BASE=/api NITRO_PRESET=static npm --prefix frontend run generate",
   "outputDirectory": "frontend/.output/public",
   "rewrites": [
     {
