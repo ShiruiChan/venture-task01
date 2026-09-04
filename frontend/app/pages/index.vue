@@ -199,15 +199,13 @@ function shift(delta: number) {
       </div>
 
       <DynamicsChart :points="points" />
-      <div class="cards">
-        <HourlyTable
-          :rows="hours"
-          :day="hourlyDay"
-          :loading="hourlyPending"
-          :error="hourlyError?.message ?? null"
-          :note="hourlyNote"
-        />
-      </div>
+      <HourlyTable
+        :rows="hours"
+        :day="hourlyDay"
+        :loading="hourlyPending"
+        :error="hourlyError?.message ?? null"
+        :note="hourlyNote"
+      />
     </main>
   </div>
 </template>
