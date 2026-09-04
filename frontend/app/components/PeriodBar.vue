@@ -6,9 +6,7 @@ const props = defineProps<{
   offset: number
   label: string
   loading?: boolean
-  /** время последней удачной загрузки */
   updatedAt?: Date | null
-  /** границы произвольного периода, ISO-строки для input[type=date] */
   customFrom?: string
   customTo?: string
 }>()
