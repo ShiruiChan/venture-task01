@@ -89,3 +89,25 @@ def test_api_mapping_remaps_object(client):
     )
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_laser_hourly_returns_current_and_previous_series(client, monkeypatch):
+    class FakeLaser:
+        def __init__(self, _config):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *exc_info):
+            pass
+
+        async def fetch_hourly(self, day):
+            return {"label": "Лазер", "total": 1, "points": [{"at": f"{day.isoformat()}T12:00:00", "value": 1}]}
+
+    monkeypatch.setattr("app.web.GuestanceSource", FakeLaser)
+    response = client.get("/api/laser/hourly", params={"day": "2026-08-30"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["date"] == "2026-08-30"
+    assert [series["points"][0]["at"][:10] for series in body["series"]] == ["2026-08-30", "2026-08-23"]

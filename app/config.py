@@ -88,6 +88,7 @@ class LaserConfig:
     mode: str = field(default_factory=lambda: _env("LASER_MODE", "fixture"))
     base_url: str = field(default_factory=lambda: _env("LASER_BASE_URL"))
     daily_path: str = field(default_factory=lambda: _env("LASER_DAILY_PATH", "/api/v1/counters/daily"))
+    hourly_path: str = field(default_factory=lambda: _env("LASER_HOURLY_PATH", "/api/v1/counters/hourly"))
     objects_path: str = field(default_factory=lambda: _env("LASER_OBJECTS_PATH", "/api/v1/objects"))
     auth_mode: str = field(default_factory=lambda: _env("LASER_AUTH_MODE", "bearer"))  # bearer|basic|login|none
     token: str = field(default_factory=lambda: _env("LASER_TOKEN"))

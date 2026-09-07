@@ -22,6 +22,7 @@
 | POST | `/api/mapping` | переназначить объект источника: `{source, external_id, division_id}` |
 | POST | `/api/sync` | ручной сбор: `?days=N` |
 | GET | `/api/rarus/hourly` | почасовая детализация 1С-Рарус: `?day=ГГГГ-ММ-ДД` |
+| GET | `/api/laser/hourly` | почасовая детализация Лазера за выбранный день и неделю ранее: `?day=ГГГГ-ММ-ДД` |
 | GET | `/api/runs` | журнал запусков сбора: `?limit=N` |
 
 ## Вариант 1. Docker (рекомендуемый)

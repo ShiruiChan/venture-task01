@@ -17,13 +17,18 @@ export interface HourlyResponse {
   series: HourlySeries[]
 }
 
-export interface HourRow {
-  hour: number
-  label: string
+export interface SystemHourData {
   current: number | null
   previous: number | null
   delta: number | null
   share: number | null
+}
+
+export interface HourRow {
+  hour: number
+  label: string
+  rarus: SystemHourData
+  laser: SystemHourData
 }
 
 const HOURS = 24
@@ -47,20 +52,30 @@ function byHour(series: HourlySeries | undefined): Array<number | null> {
   return values
 }
 
-export function hourlyRows(response: HourlyResponse | null | undefined): HourRow[] {
-  const current = byHour(response?.series?.[0])
-  const previous = byHour(response?.series?.[1])
+function createSystemData(current: Array<number | null>, previous: Array<number | null>, hour: number): SystemHourData {
+  const now = current[hour] ?? null
+  const before = previous[hour] ?? null
   const total = current.reduce<number>((sum, value) => sum + (value ?? 0), 0)
+  return {
+    current: now,
+    previous: before,
+    delta: now !== null && before !== null ? now - before : null,
+    share: now !== null && total > 0 ? (now / total) * 100 : null,
+  }
+}
+
+export function hourlyRows(rarusResponse: HourlyResponse | null | undefined, laserResponse: HourlyResponse | null | undefined): HourRow[] {
+  const rarusCurrent = byHour(rarusResponse?.series?.[0])
+  const rarusPrevious = byHour(rarusResponse?.series?.[1])
+  const laserCurrent = byHour(laserResponse?.series?.[0])
+  const laserPrevious = byHour(laserResponse?.series?.[1])
+
   return Array.from({ length: HOURS }, (_, hour) => {
-    const now = current[hour] ?? null
-    const before = previous[hour] ?? null
     return {
       hour,
       label: `${pad(hour)}:00`,
-      current: now,
-      previous: before,
-      delta: now !== null && before !== null ? now - before : null,
-      share: now !== null && total > 0 ? (now / total) * 100 : null,
+      rarus: createSystemData(rarusCurrent, rarusPrevious, hour),
+      laser: createSystemData(laserCurrent, laserPrevious, hour),
     }
   })
 }
@@ -99,14 +114,22 @@ export function hourlyColumns(day: string): { current: DayLabel; previous: DayLa
   return { current: dayLabel(date), previous: dayLabel(week) }
 }
 
+export interface HourlyDataBoth {
+  rarus: HourlyResponse
+  laser: HourlyResponse
+}
+
 export function useHourlyApi() {
   const { public: config } = useRuntimeConfig()
 
-  function fetchHourly(day: string | Date) {
-    return $fetch<HourlyResponse>(`${config.apiBase}/rarus/hourly`, {
-      query: { day: typeof day === 'string' ? day : toISO(day) },
-    })
+  async function fetchHourlyBoth(day: string | Date): Promise<HourlyDataBoth> {
+    const dayStr = typeof day === 'string' ? day : toISO(day)
+    const [rarus, laser] = await Promise.all([
+      $fetch<HourlyResponse>(`${config.apiBase}/rarus/hourly`, { query: { day: dayStr } }),
+      $fetch<HourlyResponse>(`${config.apiBase}/laser/hourly`, { query: { day: dayStr } })
+    ])
+    return { rarus, laser }
   }
 
-  return { fetchHourly }
+  return { fetchHourlyBoth }
 }

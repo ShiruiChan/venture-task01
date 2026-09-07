@@ -101,6 +101,21 @@ async def test_fetch_daily_filters_period_and_decodes_cp1251():
     assert rows[1].fields[4] == "Включение питания"
 
 
+async def test_fetch_hourly_sums_events_by_hour():
+    journal = (
+        "20/02/19 12:31,10,5,4,3\r\n"
+        "20/02/19 12:32,10,7,6,2\r\n"
+        "20/02/19 13:01,10,4,4,1\r\n"
+    )
+    async with make_source(counter_transport(journal)) as source:
+        series = await source.fetch_hourly(date(2019, 2, 20))
+    assert series["total"] == 16
+    assert [(point["at"], point["value"]) for point in series["points"]] == [
+        ("2019-02-20T12:00:00", 12),
+        ("2019-02-20T13:00:00", 4),
+    ]
+
+
 async def test_one_day_period_asks_for_a_single_day_number():
     requests: list[httpx.Request] = []
 

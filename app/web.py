@@ -1,4 +1,5 @@
 """JSON-API; дашборд (Nuxt) живёт отдельным процессом и ходит сюда по сети."""
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
@@ -12,7 +13,7 @@ from pydantic import BaseModel, Field
 from . import analytics, db, sync
 from .config import settings
 from .models import SOURCE_TITLES, STATUS_TITLES
-from .sources import RarusSource
+from .sources import GuestanceSource, LaserSource, RarusSource
 from .sources.base import SourceError
 
 log = logging.getLogger("attendance.web")
@@ -222,6 +223,22 @@ async def api_rarus_hourly(day: Optional[str] = Query(None)):
     try:
         async with RarusSource(settings.rarus) as source:
             return {"date": target.isoformat(), "series": await source.fetch_hourly(target)}
+    except SourceError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+
+
+@app.get("/api/laser/hourly")
+async def api_laser_hourly(day: Optional[str] = Query(None)):
+    """Почасовая детализация Лазера за выбранные сутки и неделю ранее."""
+    target = date.fromisoformat(day) if day else date.today()
+    previous = target - timedelta(days=7)
+    source_type = GuestanceSource if settings.laser.mode == "guestance" else LaserSource
+    try:
+        async with source_type(settings.laser) as source:
+            current, prior = await asyncio.gather(
+                source.fetch_hourly(target), source.fetch_hourly(previous)
+            )
+        return {"date": target.isoformat(), "series": [current, prior]}
     except SourceError as exc:
         return JSONResponse({"error": str(exc)}, status_code=502)
 

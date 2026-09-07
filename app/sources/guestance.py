@@ -213,6 +213,26 @@ class GuestanceSource:
             )
         return [c for c in counts if day_from <= c.day <= day_to]
 
+    async def fetch_hourly(self, day: date) -> dict[str, object]:
+        """Суммирует проходы всех счётчиков по часам за одни сутки."""
+        hourly = [0] * 24
+        for _serial, _label, _host, journal in await self._collect(day, day):
+            for row in parse_journal(journal):
+                if row.moment.date() != day or row.event not in self.config.count_events:
+                    continue
+                hourly[row.moment.hour] += row.value(self.config.entered_column) or 0
+
+        points = [
+            {
+                "ts": int(datetime(day.year, day.month, day.day, hour).timestamp() * 1000),
+                "at": datetime(day.year, day.month, day.day, hour).isoformat(),
+                "value": value,
+            }
+            for hour, value in enumerate(hourly)
+            if value
+        ]
+        return {"label": "Лазер", "total": sum(hourly), "points": points}
+
     async def _collect(
         self, day_from: Optional[date] = None, day_to: Optional[date] = None
     ) -> list[tuple[str, str, str, str]]:

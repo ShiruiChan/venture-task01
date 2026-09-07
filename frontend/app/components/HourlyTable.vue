@@ -13,7 +13,8 @@ const props = defineProps<{
 const showAll = ref(false)
 
 function isEmpty(row: HourRow): boolean {
-  return !(row.current ?? 0) && !(row.previous ?? 0)
+  return !(row.rarus.current ?? 0) && !(row.rarus.previous ?? 0) && 
+         !(row.laser.current ?? 0) && !(row.laser.previous ?? 0)
 }
 
 const visibleRows = computed(() => (showAll.value ? props.rows : props.rows.filter((row) => !isEmpty(row))))
@@ -22,17 +23,23 @@ const hiddenCount = computed(() => props.rows.length - props.rows.filter((row) =
 
 const columns = computed(() => hourlyColumns(props.day))
 
-const peak = computed(() => Math.max(0, ...props.rows.map((row) => row.current ?? 0)))
+const peakRarus = computed(() => Math.max(0, ...props.rows.map((row) => row.rarus.current ?? 0)))
+const peakLaser = computed(() => Math.max(0, ...props.rows.map((row) => row.laser.current ?? 0)))
 
 const totals = computed(() => {
-  const current = props.rows.reduce<number>((sum, row) => sum + (row.current ?? 0), 0)
-  const previous = props.rows.reduce<number>((sum, row) => sum + (row.previous ?? 0), 0)
-  return { current, previous, delta: current - previous }
+  const rarusCurrent = props.rows.reduce<number>((sum, row) => sum + (row.rarus.current ?? 0), 0)
+  const rarusPrevious = props.rows.reduce<number>((sum, row) => sum + (row.rarus.previous ?? 0), 0)
+  const laserCurrent = props.rows.reduce<number>((sum, row) => sum + (row.laser.current ?? 0), 0)
+  const laserPrevious = props.rows.reduce<number>((sum, row) => sum + (row.laser.previous ?? 0), 0)
+  return {
+    rarus: { current: rarusCurrent, previous: rarusPrevious, delta: rarusCurrent - rarusPrevious },
+    laser: { current: laserCurrent, previous: laserPrevious, delta: laserCurrent - laserPrevious }
+  }
 })
 
-function barWidth(row: HourRow): string {
-  if (!peak.value || row.current === null) return '0%'
-  return `${(row.current / peak.value) * 100}%`
+function barWidth(value: number | null, peak: number): string {
+  if (!peak || value === null) return '0%'
+  return `${(value / peak) * 100}%`
 }
 
 function signed(value: number | null): string {
@@ -52,11 +59,11 @@ function share(value: number | null): string {
       <div class="hours_heading">
         <h2 class="hours_title">
           Посещаемость по часам за {{ columns.current.long }}
-          <span class="hours_hint" title="Виджет 1С-Рарус «Посещаемость по часам»; данные только по одним суткам"
-                role="img" aria-label="Виджет 1С-Рарус «Посещаемость по часам»; данные только по одним суткам">i</span>
+          <span class="hours_hint" title="Сравнение данных 1С-Рарус и Лазер; данные только по одним суткам"
+                role="img" aria-label="Сравнение данных 1С-Рарус и Лазер; данные только по одним суткам">i</span>
         </h2>
         <p class="hours_sub">
-          Источник - 1С-Рарус<template v-if="note">, {{ note }}</template>.
+          Источник - 1С-Рарус и Лазер<template v-if="note">, {{ note }}</template>.
           Для сравнения рядом тот же день недели неделей раньше, {{ columns.previous.long }}.
         </p>
       </div>
@@ -73,49 +80,77 @@ function share(value: number | null): string {
       <table class="hours_table">
         <thead>
           <tr>
-            <th scope="col" class="col-hour">Час</th>
+            <th scope="col" rowspan="2" class="col-hour">Час</th>
+            <th scope="col" colspan="3" class="system-header">1С-Рарус</th>
+            <th scope="col" colspan="3" class="system-header">Лазер</th>
+          </tr>
+          <tr>
             <th scope="col">
               <span class="col_name">Этот день</span>
-              <span class="col_note">{{ columns.current.date }}, {{ columns.current.weekday }}</span>
+              <span class="col_note">{{ columns.current.date }}</span>
             </th>
             <th scope="col">
               <span class="col_name">Неделей раньше</span>
-              <span class="col_note">{{ columns.previous.date }}, {{ columns.previous.weekday }}</span>
+              <span class="col_note">{{ columns.previous.date }}</span>
             </th>
             <th scope="col">
-              <span class="col_name">Дельта к неделе</span>
+              <span class="col_name">Дельта</span>
               <span class="col_note">человек</span>
             </th>
             <th scope="col">
-              <span class="col_name">Доля</span>
-              <span class="col_note">от суток</span>
+              <span class="col_name">Этот день</span>
+              <span class="col_note">{{ columns.current.date }}</span>
+            </th>
+            <th scope="col">
+              <span class="col_name">Неделей раньше</span>
+              <span class="col_note">{{ columns.previous.date }}</span>
+            </th>
+            <th scope="col">
+              <span class="col_name">Дельта</span>
+              <span class="col_note">человек</span>
             </th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="row in visibleRows" :key="row.hour">
             <th scope="row" class="col-hour">{{ row.label }}</th>
+            <!-- Рарус -->
             <td class="num num--bar">
-              <span class="bar" :style="{ width: barWidth(row) }" aria-hidden="true" />
-              <span class="num_value">{{ formatNumber(row.current) }}</span>
+              <span class="bar" :style="{ width: barWidth(row.rarus.current, peakRarus) }" aria-hidden="true" />
+              <span class="num_value">{{ formatNumber(row.rarus.current) }}</span>
             </td>
-            <td class="num is-muted">{{ formatNumber(row.previous) }}</td>
-            <td class="num" :class="row.delta === null || row.delta === 0 ? 'is-muted'
-                                    : row.delta > 0 ? 'is-up' : 'is-down'">
-              {{ signed(row.delta) }}
+            <td class="num is-muted">{{ formatNumber(row.rarus.previous) }}</td>
+            <td class="num" :class="row.rarus.delta === null || row.rarus.delta === 0 ? 'is-muted'
+                                    : row.rarus.delta > 0 ? 'is-up' : 'is-down'">
+              {{ signed(row.rarus.delta) }}
             </td>
-            <td class="num is-muted">{{ share(row.share) }}</td>
+            <!-- Лазер -->
+            <td class="num num--bar">
+              <span class="bar" :style="{ width: barWidth(row.laser.current, peakLaser) }" aria-hidden="true" />
+              <span class="num_value">{{ formatNumber(row.laser.current) }}</span>
+            </td>
+            <td class="num is-muted">{{ formatNumber(row.laser.previous) }}</td>
+            <td class="num" :class="row.laser.delta === null || row.laser.delta === 0 ? 'is-muted'
+                                    : row.laser.delta > 0 ? 'is-up' : 'is-down'">
+              {{ signed(row.laser.delta) }}
+            </td>
           </tr>
         </tbody>
         <tfoot>
           <tr>
             <th scope="row" class="col-hour">Итого</th>
-            <td class="num">{{ formatNumber(totals.current) }}</td>
-            <td class="num is-muted">{{ formatNumber(totals.previous) }}</td>
-            <td class="num" :class="totals.delta === 0 ? 'is-muted' : totals.delta > 0 ? 'is-up' : 'is-down'">
-              {{ signed(totals.delta) }}
+            <!-- Рарус -->
+            <td class="num">{{ formatNumber(totals.rarus.current) }}</td>
+            <td class="num is-muted">{{ formatNumber(totals.rarus.previous) }}</td>
+            <td class="num" :class="totals.rarus.delta === 0 ? 'is-muted' : totals.rarus.delta > 0 ? 'is-up' : 'is-down'">
+              {{ signed(totals.rarus.delta) }}
             </td>
-            <td class="num is-muted">100%</td>
+            <!-- Лазер -->
+            <td class="num">{{ formatNumber(totals.laser.current) }}</td>
+            <td class="num is-muted">{{ formatNumber(totals.laser.previous) }}</td>
+            <td class="num" :class="totals.laser.delta === 0 ? 'is-muted' : totals.laser.delta > 0 ? 'is-up' : 'is-down'">
+              {{ signed(totals.laser.delta) }}
+            </td>
           </tr>
         </tfoot>
       </table>
@@ -224,6 +259,13 @@ function share(value: number | null): string {
   color: var(--muted);
   font-weight: 600;
   vertical-align: bottom;
+}
+
+.system-header {
+  background: #f9f9fc;
+  font-weight: 700;
+  color: var(--ink);
+  text-align: center !important;
 }
 
 /* заголовок колонки в две строки: что за столбец и за какую дату */

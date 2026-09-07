@@ -121,6 +121,46 @@ class LaserSource:
         )
         return [c for c in self._parse_daily(body) if day_from <= c.day <= day_to]
 
+    async def fetch_hourly(self, day: date) -> dict[str, Any]:
+        """Возвращает почасовую серию из API или fixture-выгрузки."""
+        if self.is_fixture:
+            body = self._fixture_body() or {}
+            rows = body.get("hourly") if isinstance(body, dict) else None
+        else:
+            body = await self._request(
+                self.config.hourly_path,
+                {"date": day.isoformat(), "date_from": day.isoformat(), "date_to": day.isoformat()},
+            )
+            rows = body
+
+        points: list[dict[str, Any]] = []
+        for row in self._rows(rows):
+            moment = _first(row, ("at", "datetime", "timestamp", "ts", "date"))
+            value = _to_int(_first(row, _ENTERED_KEYS))
+            if value is None:
+                continue
+            parsed = self._hourly_datetime(moment, day)
+            if parsed is not None and parsed.date() == day:
+                points.append({"ts": int(parsed.timestamp() * 1000), "at": parsed.isoformat(), "value": value})
+        points.sort(key=lambda point: point["ts"])
+        return {"label": "Лазер", "total": sum(point["value"] for point in points), "points": points}
+
+    @staticmethod
+    def _hourly_datetime(value: Any, day: date) -> Optional[datetime]:
+        if isinstance(value, (int, float)) or (isinstance(value, str) and value.isdigit()):
+            timestamp = float(value) / 1000 if float(value) > 1e11 else float(value)
+            return datetime.fromtimestamp(timestamp, tz=timezone.utc).replace(tzinfo=None)
+        if value is None:
+            return None
+        text = str(value).replace("Z", "+00:00")
+        try:
+            return datetime.fromisoformat(text)
+        except ValueError:
+            try:
+                return datetime.fromisoformat(f"{day.isoformat()}T{text[:5]}:00")
+            except ValueError:
+                return None
+
     async def _auth_headers(self) -> dict[str, str]:
         mode = self.config.auth_mode
         if mode == "bearer" and self.config.token:

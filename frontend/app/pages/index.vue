@@ -65,23 +65,23 @@ const hourlyDay = computed(() => {
   return toISO(period.value.to > today ? today : period.value.to);
 });
 
-const { fetchHourly } = useHourlyApi();
+const { fetchHourlyBoth } = useHourlyApi();
 
 const {
   data: hourly,
   pending: hourlyPending,
   error: hourlyError,
   refresh: refreshHourly,
-} = await useAsyncData<HourlyResponse>(
+} = await useAsyncData(
   "hourly",
-  () => fetchHourly(hourlyDay.value),
+  () => fetchHourlyBoth(hourlyDay.value),
   {
     watch: [hourlyDay],
     server: false,
   },
 );
 
-const hours = computed(() => hourlyRows(hourly.value));
+const hours = computed(() => hourly.value ? hourlyRows(hourly.value.rarus, hourly.value.laser) : []);
 
 // период шире суток - объясняем, какие именно сутки попали в таблицу
 const hourlyNote = computed(() => {
